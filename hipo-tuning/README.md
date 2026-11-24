@@ -1,7 +1,6 @@
 # HiPO options for multi-year energy design LPs
 
-This repository is HiGHS 1.16.0 (upstream commit `f3f113d`) plus one commit on branch `hipo-options`. The commit
-adds six options to HiPO, HiGHS's interior-point solver. Their defaults reproduce stock HiGHS exactly; set them, and
+This repository is HiGHS 1.16.0 (upstream commit `f3f113d`) plus one commit that adds six options to HiPO, HiGHS's interior-point solver. Their defaults reproduce stock HiGHS exactly; set them, and
 HiPO solves every steel-plant design and operation LP we have, where stock HiPO fails on most multi-year designs.
 This folder holds the findings, the benchmark scripts and the results.
 
