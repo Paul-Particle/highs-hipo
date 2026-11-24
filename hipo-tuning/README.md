@@ -158,6 +158,12 @@ uv pip install --python <venv>/bin/python highspy-extras==1.16.0 <this repo>
 - **Command line binary** (for `solve_lp_with_highs_cli.sh`):
   `cmake -S . -B build -DHIPO=ON -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && make -C build -j highs-bin highs_extras`.
   On Linux this needs a BLAS (`-DBUILD_OPENBLAS=ON`, or a system OpenBLAS).
+- **Windows:** prebuilt wheels for Python 3.11-3.13 are in the release `v1.16.0-hipo.1`, as compiling needs the
+  Microsoft C++ Build Tools. HiPO there needs the Microsoft Visual C++ Redistributable (`highs_extras.dll` imports
+  `MSVCP140.dll`), and on CPUs with AVX-512 `OPENBLAS_CORETYPE=Haswell`, set before highspy is imported: the
+  extras' OpenBLAS kernels for AVX-512 give HiPO NaN at its first iteration. Both hold for stock highspy too.
+- `check_wheel_hipo.py`: checks an installed highspy: the fork's options are accepted, and HiPO with them matches
+  simplex on a 150 x 200 transport LP.
 - linopy ignores HiGHS's refusal of an unknown option, so with a stock highspy the `hipo_*` options are silently
   dropped. Check `Highs().setOptionValue("hipo_correctors", 3) == HighsStatus.kOk` before relying on them.
 
