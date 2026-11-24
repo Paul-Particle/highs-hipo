@@ -1,6 +1,6 @@
 # HiPO options for multi-year energy design LPs
 
-This repository is HiGHS 1.16.0 (upstream commit `f3f113d`) plus two commits that add seven options to HiPO, HiGHS's interior-point solver. Their defaults reproduce stock HiGHS exactly; set them, and
+This repository is HiGHS 1.16.0 (upstream commit `f3f113d`) plus commits that add nine options to HiPO, HiGHS's interior-point solver. Their defaults reproduce stock HiGHS exactly; set them, and
 HiPO solves every steel-plant design and operation LP we have, where stock HiPO fails on most multi-year designs.
 This folder holds the findings, the benchmark scripts and the results.
 
@@ -8,7 +8,7 @@ This folder holds the findings, the benchmark scripts and the results.
 - **Stock HiPO fails on most of our 10- and 26-year designs.** It mistakes slow progress for stagnation, throws its
   progress away and hands over to IPX, which then takes hours.
 - **With the options below it solves all of them, 10-100x faster than IPX**, with objectives matching IPX to about
-  1e-9 (one case 7e-8). A 26-year design takes about 3 minutes instead of 2.5-5 hours; a 26-year hourly operation
+  1e-8. A 26-year design takes about 3 minutes instead of 2.5-5 hours; a 26-year hourly operation
   run about 5.5 minutes instead of 4.9 hours.
 - **Threads do not help** on these LPs: HiPO picks its serial factorisation. Run several single-thread solves side by
   side instead, limited by memory (3.5 GB per 26-year design, 7-9 GB per 26-year operation run).
@@ -17,7 +17,8 @@ This folder holds the findings, the benchmark scripts and the results.
 ```python
 solver_options = {"solver": "hipo", "run_crossover": "off", "threads": 1,
                   "hipo_correctors": 3, "hipo_stagnation_min_progress": 0.1,
-                  "hipo_feasibility_tolerance_factor": 0.1, "hipo_stagnation_check_best": True,
+                  "hipo_feasibility_tolerance_factor": 0.1, "hipo_primal_regularisation": 1e-10,
+                  "hipo_dual_regularisation": 1e-8, "hipo_check_best_iterate": True,
                   "ipm_iteration_limit": 500}
 ```
 
@@ -29,7 +30,9 @@ solver_options = {"solver": "hipo", "run_crossover": "off", "threads": 1,
 | `hipo_short_step` | 0.05 | 0.05 | Step length (fraction of the way to the boundary) below which a step counts as short |
 | `hipo_feasibility_tolerance_factor` | 1 | 0.1 | HiPO stops at this multiple of the feasibility tolerance, so the final check after postsolve passes |
 | `hipo_corrector_min_increase` | 0.01 | 0.01 | Step increase a corrector must bring to be kept |
-| `hipo_stagnation_check_best` | false | true | When HiPO stalls for good, its best iterate goes to the final KKT check before the current one |
+| `hipo_primal_regularisation` | 1e-12 | 1e-10 | Static primal regularisation added to the pivots of the Newton system |
+| `hipo_dual_regularisation` | 1e-10 | 1e-8 | Static dual regularisation added to the pivots of the Newton system |
+| `hipo_check_best_iterate` | false | true | When HiPO cannot go on (it stalls, or its direction is NaN with no factorisation left), its best iterate goes to the final KKT check before the current one |
 | `ipm_iteration_limit` (existing) | 200 | 500 | The hardest design (26 years, min load 0) needs about 160 iterations |
 
 ## Why stock HiPO fails, read from the 1.16.0 source and the logs
@@ -61,20 +64,35 @@ iteration 0 for dozens of iterations. Each part alone is not enough: the progres
 window (2012-2021); three correctors with the stock rule failed on the 26-year design. Raising the short-step count
 instead (to 20) also works, but wastes up to 20 iterations in the end-game breakdown.
 
-### A third case: breakdown just short of optimal
-On one of 467 Australian 10-year designs (cell -25.00, 118.25, years 2003-2012) the recommended options without
-`hipo_stagnation_check_best` ended "Unknown":
-1. At iteration 45 HiPO was nearly done: infeasibilities about 1e-10, gap 1.9e-7, target 1e-8.
-2. At iteration 46 the up-looking factorisation returned a NaN direction. HiPO switched to the multifrontal one,
-   whose directions were also inaccurate (linear-solve residual up to 3e-4), and the next two steps made the iterate
-   worse (dual infeasibility from 1e-11 to 2e-7).
-3. The collapsing-direction test then ended the run, and HiPO KKT-checked the current, degraded iterate. It passed
-   inside HiPO at 80x the tolerance (100x allowed) but failed after postsolve at 240x, so HiGHS reported "Unknown".
+### A third problem: the linear algebra breaks down just short of optimal
+The first two fixes left about 1 % of LPs failing in the last iterations, with infeasibilities near 1e-10 and
+the gap within a factor of 10-20 of its target. Near the optimum the scaling of the Newton system spans 1e-12 to 1e13,
+and the solves lose all accuracy (linear-solve residual up to 1). Three outcomes were seen:
+- **NaN with no factorisation left** (Spanish plant 2016-2025 and 2000-2025 with free stores, an Ebro cell 2006-2015):
+  the up-looking factorisation returned a NaN direction, HiPO switched to the multifrontal one, which returned NaN
+  too, and HiPO ended with "Internal error", discarding a nearly optimal point.
+- **Degraded last iterate** (Australian cell -25.00, 118.25, 2003-2012): after the switch, two more steps made the
+  iterate worse; HiPO then stalled and KKT-checked that degraded iterate, which passed inside HiPO at 80x the tolerance
+  (100x allowed) but failed after postsolve at 240x, so HiGHS reported "Unknown".
+- **Normal finish, failed after postsolve** (an Australian single year, 2015; 17 Australian single-year designs fell
+  back to simplex, all in 2000, 2001 and 2013-2015, the years added last): HiPO met its targets
+  and its own check passed at 41x, but the same absolute row error is measured against a bound norm of 342 inside
+  HiPO and 114 after postsolve, so it failed there at 121x.
 
-Stock HiPO already returns its best iterate on every other failure path. With `hipo_stagnation_check_best` the best
-iterate (here 46) is checked first; it passed after postsolve at 2.9x, objective 1.5e-8 from simplex's. If the best
-iterate fails the check, the current one is checked as before. Two or four correctors instead of three also avoided
-this breakdown, but only by taking a different path, which does not prevent it elsewhere.
+**Fix at the root: more static regularisation.** HiPO adds a fixed 1e-12 (primal) and 1e-10 (dual) to the pivots of
+its Newton system; at 1e-10 and 1e-8 all of the above solve without a NaN and pass the final check within tolerance,
+with objectives within 1e-9 of simplex's (before: 2e-8). The hardest Ebro designs keep their objectives and need
+similar or fewer iterations (26 years at min load 0: 111 instead of 156).
+
+**Safety net: the best iterate.** Stock HiPO returns its best iterate on every failure path except these two: when it
+stalls for good it checks its current iterate, and when the direction is NaN with no factorisation left it returns
+nothing. With `hipo_check_best_iterate` it offers its best iterate to the final check first, and the current one if
+that fails. Without the regularisation, this alone rescued the first two outcomes (final check at 1.4-94x), but not
+the third.
+
+Not taken: a tighter `primal_residual_tolerance` (1e-8) gives HiPO's own check a margin and fixed the third outcome,
+but it also made the rescued best iterate of the Ebro cell fail the check. Two or four correctors instead of three
+avoided some breakdowns by taking a different path, which does not prevent them elsewhere.
 
 The other safeguards are unchanged: collapsing directions (dx/x below 1e-30 of its largest), infeasibility jumping
 by 1e12, divergence tests for infeasible or unbounded problems, and "HiPO stagnated but HiGHS considers the solution
@@ -109,16 +127,18 @@ All 13 design windows (five of 5 years, eight of 10 years, from 2000-2025): stoc
 windows; with the recommended options all 13 solved in 18-65 s each, plus a 10-year window at min load 0.2 in 63 s.
 Peak memory: 3.5 GB for a 26-year design, 7.2 GB for the 26-year operation run.
 
-Australia (467 10-year designs, cells and base mixes, Mac, recommended options without
-`hipo_stagnation_check_best`): 466 optimal by HiPO in a median of 50 s and at most 2.6 minutes; the one above ended
-"Unknown" and needed simplex (24 minutes). With the option it is optimal in 34 s; the 26-year design at min load 0, the
-only other LP here that ended through the same path, gives the same objective as before.
+Australia and Spain (Mac, the options without regularisation and `hipo_check_best_iterate`): 466 of 467 Australian
+10-year windows with year-end ties, and 1,949 of 1,971 cell designs and 4 of 6 Spanish plant designs with free stores,
+optimal by HiPO, mostly in under a minute. The rest needed simplex, up to hours for the 26-year plant design. Five of
+them, one of each kind above plus the two Spanish plant designs, re-solved with the regularisation: all optimal, with
+objectives within 1e-9 of simplex's.
 
 Linux (Ubuntu 26.04 x86_64, OpenBLAS, 1 thread): stock HiPO did not finish the 10-year design in 400 s or the 26-year
 design in 900 s; with the recommended options they took 77 s and 348 s.
 
-AWS (Graviton, stock HiGHS 1.16.0, 6 threads), 26-year designs: two of four solved by HiPO in 4-12 minutes; the one
-with year-end store ties at min load 0.2 fell back to IPX, which took 2.2 hours.
+AWS (Graviton, stock HiGHS 1.16.0, 6 threads), 26-year designs: stock HiPO solved the three whose stores carry across
+years in minutes; the one with year-end store ties at min load 0.2 fell back to IPX, which took 2.2 hours. The
+year-end ties are what trip stock HiPO's stagnation rule (see "What did not work": without them stock HiPO succeeds).
 
 The model's demo (18 small one-year solves): 173 s of solver time with HiPO (at most 19 s per solve), 1,107 s with
 HiPO plus crossover, 4,324 s with simplex, HiGHS's default (up to 697 s per solve). Total cost, LCOS and capacities

@@ -412,7 +412,9 @@ struct HighsOptionsStruct {
   double hipo_stagnation_min_progress;
   double hipo_corrector_min_increase;
   double hipo_feasibility_tolerance_factor;
-  bool hipo_stagnation_check_best;
+  bool hipo_check_best_iterate;
+  double hipo_primal_regularisation;
+  double hipo_dual_regularisation;
   HighsInt hipo_parallel_force;
   HighsInt hipo_parallel_forbid;
   bool hipo_serial_blas;
@@ -606,7 +608,9 @@ struct HighsOptionsStruct {
         hipo_stagnation_min_progress(0.0),
         hipo_corrector_min_increase(0.01),
         hipo_feasibility_tolerance_factor(1.0),
-        hipo_stagnation_check_best(false),
+        hipo_check_best_iterate(false),
+        hipo_primal_regularisation(1e-12),
+        hipo_dual_regularisation(1e-10),
         hipo_parallel_force(0),
         hipo_parallel_forbid(0),
         hipo_serial_blas(true),
@@ -1432,11 +1436,26 @@ class HighsOptions : public HighsOptionsStruct {
     records.push_back(record_double);
 
     record_bool = new OptionRecordBool(
-        "hipo_stagnation_check_best",
-        "When HiPO stalls for good, offer its best iterate to the final KKT "
-        "check before the current one",
-        advanced, &hipo_stagnation_check_best, false);
+        "hipo_check_best_iterate",
+        "When HiPO cannot go on (it stalls, or its direction is NaN with no "
+        "factorisation left to switch to), offer its best iterate to the final "
+        "KKT check before the current one",
+        advanced, &hipo_check_best_iterate, false);
     records.push_back(record_bool);
+
+    record_double = new OptionRecordDouble(
+        "hipo_primal_regularisation",
+        "Static primal regularisation added to the pivots of HiPO's Newton "
+        "system",
+        advanced, &hipo_primal_regularisation, 0, 1e-12, 1e-4);
+    records.push_back(record_double);
+
+    record_double = new OptionRecordDouble(
+        "hipo_dual_regularisation",
+        "Static dual regularisation added to the pivots of HiPO's Newton "
+        "system",
+        advanced, &hipo_dual_regularisation, 0, 1e-10, 1e-4);
+    records.push_back(record_double);
 
     record_bool = new OptionRecordBool(
         "hipo_serial_blas",

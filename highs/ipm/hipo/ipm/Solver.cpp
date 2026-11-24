@@ -100,7 +100,9 @@ void Solver::setOptions(const HighsOptions& highs_options) {
   options_.short_step = highs_options.hipo_short_step;
   options_.stagnation_min_progress = highs_options.hipo_stagnation_min_progress;
   options_.corrector_min_increase = highs_options.hipo_corrector_min_increase;
-  options_.stagnation_check_best = highs_options.hipo_stagnation_check_best;
+  options_.check_best_iterate = highs_options.hipo_check_best_iterate;
+  options_.primal_regularisation = highs_options.hipo_primal_regularisation;
+  options_.dual_regularisation = highs_options.hipo_dual_regularisation;
   options_.feasibility_tol *= highs_options.hipo_feasibility_tolerance_factor;
   options_.random_seed = highs_options.random_seed + 42;
   chooseAllowedParallelism(highs_options);
@@ -138,7 +140,8 @@ void Solver::reset() {
   alpha_primal_ = 0.0;
   alpha_dual_ = 0.0;
   sigma_ = 0.0;
-  regul_ = Regularisation{};
+  regul_.primal = options_.primal_regularisation;
+  regul_.dual = options_.dual_regularisation;
 
   LS_.reset();
   it_.reset();
@@ -423,6 +426,15 @@ isFailure Solver::solveNewtonSystem(NewtonDir& delta) {
       delta.clear();
       it_->data.back().omega = 0.0;
       terminate = solveNewtonSystem(delta);
+    } else if (info_.error == kErrorNan && options_.check_best_iterate) {
+      // No factorisation left: the iterates so far may still be good enough.
+      if (checkBestThenCurrentIterateKkt(iter_ - 1)) {
+        logger_.printw(
+            "HiPO broke down but HiGHS considers the solution acceptable\n");
+        logger_.print("=== Primal-dual feasible point found\n");
+        info_.error = kOk;
+        setStatus1(kStatusOptimal);
+      }
     }
   }
 
@@ -1164,7 +1176,7 @@ shouldTerminate Solver::checkBadIter() {
           setStatus2(kStatusNoProgress);
           resetToBestIter(iter_);
         } else {
-          if (checkBestThenCurrentIterateKkt()) {
+          if (checkBestThenCurrentIterateKkt(iter_)) {
             logger_.printw(
                 "HiPO stagnated but HiGHS considers the solution "
                 "acceptable\n");
@@ -1216,10 +1228,10 @@ shouldTerminate Solver::checkTermination() {
   return terminate;
 }
 
-isSuccess Solver::checkBestThenCurrentIterateKkt() {
+isSuccess Solver::checkBestThenCurrentIterateKkt(Int current_iter) {
   // The last iterates of a stalled run can be worse than the best one, e.g.
   // after a factorisation breakdown, so the best is offered first if asked.
-  if (options_.stagnation_check_best && it_->best_iter != iter_) {
+  if (options_.check_best_iterate && it_->best_iter != current_iter) {
     it_->swapWithBest();
     const std::string message =
         "Checking best iterate " + std::to_string(it_->best_iter) + "\n";

@@ -290,7 +290,7 @@ class Solver {
   // ===================================================================================
   shouldTerminate checkTermination();
   isSuccess checkTerminationKkt();
-  isSuccess checkBestThenCurrentIterateKkt();
+  isSuccess checkBestThenCurrentIterateKkt(Int current_iter);
 
   // ===================================================================================
   // Check for user interrupt or time limit
