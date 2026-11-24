@@ -169,6 +169,7 @@ struct Iterate {
 
   void saveBest(double feas_tol, double opt_tol, Int iter);
   bool resetBest(Int iter);
+  void swapWithBest();
 
   bool stagnation(std::stringstream& log_stream, Int max_short_steps,
                   double min_progress);

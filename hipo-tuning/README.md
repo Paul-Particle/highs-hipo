@@ -1,6 +1,6 @@
 # HiPO options for multi-year energy design LPs
 
-This repository is HiGHS 1.16.0 (upstream commit `f3f113d`) plus one commit that adds six options to HiPO, HiGHS's interior-point solver. Their defaults reproduce stock HiGHS exactly; set them, and
+This repository is HiGHS 1.16.0 (upstream commit `f3f113d`) plus two commits that add seven options to HiPO, HiGHS's interior-point solver. Their defaults reproduce stock HiGHS exactly; set them, and
 HiPO solves every steel-plant design and operation LP we have, where stock HiPO fails on most multi-year designs.
 This folder holds the findings, the benchmark scripts and the results.
 
@@ -17,7 +17,8 @@ This folder holds the findings, the benchmark scripts and the results.
 ```python
 solver_options = {"solver": "hipo", "run_crossover": "off", "threads": 1,
                   "hipo_correctors": 3, "hipo_stagnation_min_progress": 0.1,
-                  "hipo_feasibility_tolerance_factor": 0.1, "ipm_iteration_limit": 500}
+                  "hipo_feasibility_tolerance_factor": 0.1, "hipo_stagnation_check_best": True,
+                  "ipm_iteration_limit": 500}
 ```
 
 | Option | Default | Recommended | What it does |
@@ -28,6 +29,7 @@ solver_options = {"solver": "hipo", "run_crossover": "off", "threads": 1,
 | `hipo_short_step` | 0.05 | 0.05 | Step length (fraction of the way to the boundary) below which a step counts as short |
 | `hipo_feasibility_tolerance_factor` | 1 | 0.1 | HiPO stops at this multiple of the feasibility tolerance, so the final check after postsolve passes |
 | `hipo_corrector_min_increase` | 0.01 | 0.01 | Step increase a corrector must bring to be kept |
+| `hipo_stagnation_check_best` | false | true | When HiPO stalls for good, its best iterate goes to the final KKT check before the current one |
 | `ipm_iteration_limit` (existing) | 200 | 500 | The hardest design (26 years, min load 0) needs about 160 iterations |
 
 ## Why stock HiPO fails, read from the 1.16.0 source and the logs
@@ -58,6 +60,21 @@ one before the run of short steps; the existing "best iterate" measure cannot be
 iteration 0 for dozens of iterations. Each part alone is not enough: the progress test alone failed on one 10-year
 window (2012-2021); three correctors with the stock rule failed on the 26-year design. Raising the short-step count
 instead (to 20) also works, but wastes up to 20 iterations in the end-game breakdown.
+
+### A third case: breakdown just short of optimal
+On one of 467 Australian 10-year designs (cell -25.00, 118.25, years 2003-2012) the recommended options without
+`hipo_stagnation_check_best` ended "Unknown":
+1. At iteration 45 HiPO was nearly done: infeasibilities about 1e-10, gap 1.9e-7, target 1e-8.
+2. At iteration 46 the up-looking factorisation returned a NaN direction. HiPO switched to the multifrontal one,
+   whose directions were also inaccurate (linear-solve residual up to 3e-4), and the next two steps made the iterate
+   worse (dual infeasibility from 1e-11 to 2e-7).
+3. The collapsing-direction test then ended the run, and HiPO KKT-checked the current, degraded iterate. It passed
+   inside HiPO at 80x the tolerance (100x allowed) but failed after postsolve at 240x, so HiGHS reported "Unknown".
+
+Stock HiPO already returns its best iterate on every other failure path. With `hipo_stagnation_check_best` the best
+iterate (here 46) is checked first; it passed after postsolve at 2.9x, objective 1.5e-8 from simplex's. If the best
+iterate fails the check, the current one is checked as before. Two or four correctors instead of three also avoided
+this breakdown, but only by taking a different path, which does not prevent it elsewhere.
 
 The other safeguards are unchanged: collapsing directions (dx/x below 1e-30 of its largest), infeasibility jumping
 by 1e12, divergence tests for infeasible or unbounded problems, and "HiPO stagnated but HiGHS considers the solution
@@ -91,6 +108,11 @@ Mac (M1 Max VM, Apple Accelerate), 1 thread, recommended options; IPX times from
 All 13 design windows (five of 5 years, eight of 10 years, from 2000-2025): stock HiPO failed on 4 of the 8 ten-year
 windows; with the recommended options all 13 solved in 18-65 s each, plus a 10-year window at min load 0.2 in 63 s.
 Peak memory: 3.5 GB for a 26-year design, 7.2 GB for the 26-year operation run.
+
+Australia (467 10-year designs, cells and base mixes, Mac, recommended options without
+`hipo_stagnation_check_best`): 466 optimal by HiPO in a median of 50 s and at most 2.6 minutes; the one above ended
+"Unknown" and needed simplex (24 minutes). With the option it is optimal in 34 s; the 26-year design at min load 0, the
+only other LP here that ended through the same path, gives the same objective as before.
 
 Linux (Ubuntu 26.04 x86_64, OpenBLAS, 1 thread): stock HiPO did not finish the 10-year design in 400 s or the 26-year
 design in 900 s; with the recommended options they took 77 s and 348 s.

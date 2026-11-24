@@ -653,6 +653,20 @@ bool Iterate::resetBest(Int iter) {
   return true;
 }
 
+void Iterate::swapWithBest() {
+  x.swap(best_x);
+  xl.swap(best_xl);
+  xu.swap(best_xu);
+  y.swap(best_y);
+  zl.swap(best_zl);
+  zu.swap(best_zu);
+  model.swapBounds();
+
+  computeMu();
+  residual1234();
+  indicators();
+}
+
 bool Iterate::stagnation(std::stringstream& log_stream, Int max_short_steps,
                          double min_progress) {
   // too many iterations in a row with small stepsize

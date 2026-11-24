@@ -11,6 +11,7 @@ import export_benchmark_lps as export  # noqa: E402
 
 RECOMMENDED_OPTIONS = {"solver": "hipo", "run_crossover": "off", "threads": 1, "hipo_correctors": 3,
                        "hipo_stagnation_min_progress": 0.1, "hipo_feasibility_tolerance_factor": 0.1,
+                       "hipo_stagnation_check_best": True,
                        "ipm_iteration_limit": 500}
 
 n = export.build_design_model_on_years((2025,))

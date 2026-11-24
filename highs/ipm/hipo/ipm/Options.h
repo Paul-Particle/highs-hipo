@@ -28,6 +28,7 @@ struct Options {
   double short_step = 0.05;
   double stagnation_min_progress = 0.0;
   double corrector_min_increase = kMccIncreaseAlpha * kMccIncreaseMin;
+  bool stagnation_check_best = false;
   double time_limit = -1.0;
   Int block_size = 0;
   Int random_seed = 0;

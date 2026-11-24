@@ -448,6 +448,15 @@ void Model::saveBounds() {
     ++next;
   }
 }
+void Model::swapBounds() {
+  Int next = 0;
+  for (Int i : free_variables_) {
+    std::swap(lower_[i], best_lower_[next]);
+    std::swap(upper_[i], best_upper_[next]);
+    ++next;
+  }
+}
+
 void Model::resetBounds() {
   Int next = 0;
   for (Int i : free_variables_) {

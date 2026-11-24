@@ -97,6 +97,7 @@ class Model {
 
   void saveBounds();
   void resetBounds();
+  void swapBounds();
 
   bool hasLb(Int j) const { return std::isfinite(lower_[j]); }
   bool hasUb(Int j) const { return std::isfinite(upper_[j]); }
