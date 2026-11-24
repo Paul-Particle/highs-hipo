@@ -1,0 +1,23 @@
+lp,label,highs_version,solver,threads,options,status,objective,ipm_iterations,wall_seconds,load_before,load_after
+d10,hipo-normaleq,1.16.0,hipo,1,hipo_system=normaleq,Solve error,0.0,-1,42.5,3.07,12.77
+d10c3,hipo-clip3,1.16.0,hipo,1,,Optimal,1069184798.8169965,105,128.0,3.07,15.19
+d10,hipo-amd,1.16.0,hipo,1,hipo_ordering=amd,Unknown,1069295575.6300008,124,542.1,3.07,5.51
+y2000-2004,hipo-default,1.16.0,hipo,1,,Optimal,1036286490.9235275,108,58.0,6.39,8.57
+d10,hipo-boundscale-10,1.16.0,hipo,1,user_bound_scale=-10,Optimal,1069182871.7995791,87,65.5,6.39,8.65
+y2010-2014,hipo-default,1.16.0,hipo,1,,Optimal,1022514334.2929883,66,38.6,8.65,10.92
+y2020-2024,hipo-default,1.16.0,hipo,1,,Optimal,1063101080.7589657,77,43.3,14.69,15.89
+y2000-2009,hipo-default,1.16.0,hipo,1,,Optimal,1038876937.3073779,95,90.3,15.1,16.05
+y2005-2009,hipo-default,1.16.0,hipo,1,,Optimal,1036625124.6025819,91,228.2,8.44,15.14
+d10,hipo-watch-boundscale-10,1.16.0,hipo,1,user_bound_scale=-10 log_dev_level=2,Optimal,1069182871.7995791,87,68.3,16.37,10.82
+y2006-2015,hipo-default,1.16.0,hipo,1,,Optimal,1049116956.9143205,91,170.1,15.65,7.87
+d10,hipo-costscale-10,1.16.0,hipo,1,user_cost_scale=-10,Unknown,1069295575.6300008,124,586.5,6.39,5.9
+d10,hipo-watch-default,1.16.0,hipo,1,log_dev_level=2,Unknown,1069295575.6300008,124,477.6,16.37,5.12
+y2004-2013,s-default,1.16.0,hipo,1,log_dev_level=2,Optimal,1037651827.5691485,84,71.6,16.05,12.44
+d10,s-bs-10,1.16.0,hipo,1,log_dev_level=2 user_bound_scale=-10,Optimal,1069182871.7995791,87,57.2,1.72,3.67
+y2014-2023,s-default,1.16.0,hipo,1,log_dev_level=2,Optimal,1067024367.6339394,123,87.5,1.72,5.06
+y2012-2021,s-bs-10,1.16.0,hipo,1,log_dev_level=2 user_bound_scale=-10,Optimal,1058254203.329826,112,67.9,5.06,5.39
+y2014-2023,s-bs-10,1.16.0,hipo,1,log_dev_level=2 user_bound_scale=-10,Optimal,1067024367.5897471,136,183.2,5.13,5.74
+y2010-2019,s-bs-5,1.16.0,hipo,1,log_dev_level=2 user_bound_scale=-5,Optimal,1058255330.7086712,96,104.1,5.16,5.22
+d10,s-bs-15,1.16.0,hipo,1,log_dev_level=2 user_bound_scale=-15,Optimal,1069182865.3490094,78,47.7,5.74,5.01
+y2012-2021,s-bs-15,1.16.0,hipo,1,log_dev_level=2 user_bound_scale=-15,Optimal,1058254202.6634853,88,87.8,5.01,3.55
+d1,py-patched-cor3,1.16.0,hipo,1,log_dev_level=2,Optimal,1060265570.5158218,35,3.8,6.53,6.33

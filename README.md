@@ -1,3 +1,5 @@
+> **This fork:** HiGHS 1.16.0 plus options that make HiPO reliable on multi-year energy design LPs (branch `hipo-options`). See [`hipo-tuning/README.md`](hipo-tuning/README.md).
+
 # HiGHS - Linear optimization software
 
 <!-- ![Build Status](https://github.com/ERGO-Code/HiGHS/actions/workflows/build.yml/badge.svg) -->
