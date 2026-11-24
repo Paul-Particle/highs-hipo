@@ -593,11 +593,18 @@ void Iterate::assertConsistency(Int n, Int m) const {
   assert(static_cast<Int>(zu.size()) == n);
 }
 
-void Iterate::makeStep(double alpha_primal, double alpha_dual) {
-  if (std::min(alpha_primal, alpha_dual) < 0.05)
+void Iterate::makeStep(double alpha_primal, double alpha_dual,
+                       double short_step) {
+  if (std::min(alpha_primal, alpha_dual) < short_step) {
+    if (bad_iter_ == 0) {
+      short_run_pinf_ = pinf;
+      short_run_dinf_ = dinf;
+      short_run_pdgap_ = pdgap;
+    }
     ++bad_iter_;
-  else
+  } else {
     bad_iter_ = 0;
+  }
 
   vectorAdd(x, 1.0, delta.x, alpha_primal);
   vectorAdd(xl, 1.0, delta.xl, alpha_primal);
@@ -646,9 +653,26 @@ bool Iterate::resetBest(Int iter) {
   return true;
 }
 
-bool Iterate::stagnation(std::stringstream& log_stream) {
+bool Iterate::stagnation(std::stringstream& log_stream, Int max_short_steps,
+                         double min_progress) {
   // too many iterations in a row with small stepsize
-  bool stagnation = (bad_iter_ >= kMaxBadIter);
+  bool stagnation = (bad_iter_ >= max_short_steps);
+
+  // unless the short steps still reduced an infeasibility or the gap enough;
+  // then start counting again from here
+  if (stagnation && min_progress > 0.0) {
+    const double keep = 1.0 - min_progress;
+    auto fell = [keep](double now, double before) {
+      return before > 0.0 && now <= keep * before;
+    };
+    const bool progress = fell(pinf, short_run_pinf_) ||
+                          fell(dinf, short_run_dinf_) ||
+                          fell(pdgap, short_run_pdgap_);
+    if (progress) {
+      stagnation = false;
+      bad_iter_ = 0;
+    }
+  }
 
   // the next tests are aimed at problems where things are going
   // catastrophically bad, which may continue iterating forever otherwise.

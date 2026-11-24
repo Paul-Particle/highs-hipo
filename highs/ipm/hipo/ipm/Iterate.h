@@ -48,6 +48,8 @@ struct Iterate {
 
   // statistics for stagnation
   Int bad_iter_{};
+  // infeasibilities and gap before the current run of short steps
+  double short_run_pinf_{}, short_run_dinf_{}, short_run_pdgap_{};
   double largest_dx_x_{}, largest_dy_y_{};
   double best_pinf_ = kHighsInf, best_dinf_ = kHighsInf;
 
@@ -163,12 +165,13 @@ struct Iterate {
   // ===================================================================================
   void residuals6x6(const NewtonDir& d);
 
-  void makeStep(double alpha_primal, double alpha_dual);
+  void makeStep(double alpha_primal, double alpha_dual, double short_step);
 
   void saveBest(double feas_tol, double opt_tol, Int iter);
   bool resetBest(Int iter);
 
-  bool stagnation(std::stringstream& log_stream);
+  bool stagnation(std::stringstream& log_stream, Int max_short_steps,
+                  double min_progress);
 
   void getReg(LinearSolver& LS, const std::string& nla);
 

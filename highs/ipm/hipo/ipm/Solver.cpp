@@ -95,6 +95,12 @@ void Solver::setOptions(const HighsOptions& highs_options) {
   options_.ordering = highs_options.hipo_ordering;
   options_.factor = highs_options.hipo_factor;
   options_.block_size = highs_options.hipo_block_size;
+  options_.correctors = highs_options.hipo_correctors;
+  options_.max_short_steps = highs_options.hipo_max_short_steps;
+  options_.short_step = highs_options.hipo_short_step;
+  options_.stagnation_min_progress = highs_options.hipo_stagnation_min_progress;
+  options_.corrector_min_increase = highs_options.hipo_corrector_min_increase;
+  options_.feasibility_tol *= highs_options.hipo_feasibility_tolerance_factor;
   options_.random_seed = highs_options.random_seed + 42;
   chooseAllowedParallelism(highs_options);
 
@@ -662,7 +668,7 @@ void Solver::stepSizes() {
 void Solver::makeStep() {
   Clock clock;
   stepSizes();
-  it_->makeStep(alpha_primal_, alpha_dual_);
+  it_->makeStep(alpha_primal_, alpha_dual_, options_.short_step);
   it_->residual1234();
   it_->computeMu();
   it_->indicators();
@@ -1010,20 +1016,20 @@ isFailure Solver::centralityCorrectors() {
     double wd = wp;
     bestWeight(it_->delta, corrector, wp, wd, alpha_p, alpha_d);
 
-    if (alpha_p < alpha_p_old + kMccIncreaseAlpha * kMccIncreaseMin &&
-        alpha_d < alpha_d_old + kMccIncreaseAlpha * kMccIncreaseMin) {
+    if (alpha_p < alpha_p_old + options_.corrector_min_increase &&
+        alpha_d < alpha_d_old + options_.corrector_min_increase) {
       // reject corrector
       break;
     }
 
-    if (alpha_p >= alpha_p_old + kMccIncreaseAlpha * kMccIncreaseMin) {
+    if (alpha_p >= alpha_p_old + options_.corrector_min_increase) {
       // accept primal corrector
       vectorAdd(it_->delta.x, 1.0, corrector.x, wp);
       vectorAdd(it_->delta.xl, 1.0, corrector.xl, wp);
       vectorAdd(it_->delta.xu, 1.0, corrector.xu, wp);
       alpha_p_old = alpha_p;
     }
-    if (alpha_d >= alpha_d_old + kMccIncreaseAlpha * kMccIncreaseMin) {
+    if (alpha_d >= alpha_d_old + options_.corrector_min_increase) {
       // accept dual corrector
       vectorAdd(it_->delta.y, 1.0, corrector.y, wd);
       vectorAdd(it_->delta.zl, 1.0, corrector.zl, wd);
@@ -1109,7 +1115,8 @@ shouldTerminate Solver::checkIterate() {
 
 shouldTerminate Solver::checkStagnation() {
   std::stringstream log_stream;
-  bool stagnation = it_->stagnation(log_stream);
+  bool stagnation = it_->stagnation(log_stream, options_.max_short_steps,
+                                    options_.stagnation_min_progress);
   logger_.printInfo(log_stream.str().c_str());
   return stagnation;
 }
@@ -1516,6 +1523,7 @@ void Solver::chooseNumberOfCorrectors() {
     info_.correctors = std::floor(thresh);
     info_.correctors = std::max(info_.correctors, (Int)1);
     info_.correctors = std::min(info_.correctors, kMaxCorrectors);
+    if (options_.correctors >= 0) info_.correctors = options_.correctors;
 
   } else {
     info_.correctors = -kMaxCorrectors;

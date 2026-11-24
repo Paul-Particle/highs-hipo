@@ -406,6 +406,12 @@ struct HighsOptionsStruct {
   std::string hipo_ordering;
   std::string hipo_factor;
   HighsInt hipo_block_size;
+  HighsInt hipo_correctors;
+  HighsInt hipo_max_short_steps;
+  double hipo_short_step;
+  double hipo_stagnation_min_progress;
+  double hipo_corrector_min_increase;
+  double hipo_feasibility_tolerance_factor;
   HighsInt hipo_parallel_force;
   HighsInt hipo_parallel_forbid;
   bool hipo_serial_blas;
@@ -593,6 +599,12 @@ struct HighsOptionsStruct {
         hipo_ordering(""),
         hipo_factor(""),
         hipo_block_size(0),
+        hipo_correctors(-1),
+        hipo_max_short_steps(5),
+        hipo_short_step(0.05),
+        hipo_stagnation_min_progress(0.0),
+        hipo_corrector_min_increase(0.01),
+        hipo_feasibility_tolerance_factor(1.0),
         hipo_parallel_force(0),
         hipo_parallel_forbid(0),
         hipo_serial_blas(true),
@@ -1374,6 +1386,48 @@ class HighsOptions : public HighsOptionsStruct {
         "hipo_block_size", "Block size for dense linear algebra within HiPO",
         advanced, &hipo_block_size, 0, 128, kHighsIInf);
     records.push_back(record_int);
+
+    record_int = new OptionRecordInt(
+        "hipo_correctors",
+        "Number of centrality correctors per HiPO iteration (-1: chosen from "
+        "the cost of factorising against solving)",
+        advanced, &hipo_correctors, -1, -1, 10);
+    records.push_back(record_int);
+
+    record_int = new OptionRecordInt(
+        "hipo_max_short_steps",
+        "Consecutive short HiPO steps that count as stagnation",
+        advanced, &hipo_max_short_steps, 1, 5, kHighsIInf);
+    records.push_back(record_int);
+
+    record_double = new OptionRecordDouble(
+        "hipo_short_step",
+        "HiPO step length (fraction of the step to the boundary) below which a "
+        "step counts as short",
+        advanced, &hipo_short_step, 0, 0.05, 1);
+    records.push_back(record_double);
+
+    record_double = new OptionRecordDouble(
+        "hipo_stagnation_min_progress",
+        "A run of short HiPO steps is not stagnation if the primal or dual "
+        "infeasibility or the gap fell by at least this fraction over it "
+        "(0: short steps alone mean stagnation)",
+        advanced, &hipo_stagnation_min_progress, 0, 0, 1);
+    records.push_back(record_double);
+
+    record_double = new OptionRecordDouble(
+        "hipo_corrector_min_increase",
+        "Increase in HiPO step length a centrality corrector must bring to be "
+        "kept",
+        advanced, &hipo_corrector_min_increase, 0, 0.01, 1);
+    records.push_back(record_double);
+
+    record_double = new OptionRecordDouble(
+        "hipo_feasibility_tolerance_factor",
+        "HiPO stops at this multiple of the feasibility tolerance, leaving "
+        "room for the final check after postsolve",
+        advanced, &hipo_feasibility_tolerance_factor, 1e-4, 1, 1);
+    records.push_back(record_double);
 
     record_bool = new OptionRecordBool(
         "hipo_serial_blas",

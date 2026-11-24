@@ -23,6 +23,11 @@ struct Options {
   double optimality_tol = kIpmTolDefault;
   double crossover_tol = kIpmTolDefault;
   bool refine_with_ipx = true;
+  Int correctors = -1;
+  Int max_short_steps = kMaxBadIter;
+  double short_step = 0.05;
+  double stagnation_min_progress = 0.0;
+  double corrector_min_increase = kMccIncreaseAlpha * kMccIncreaseMin;
   double time_limit = -1.0;
   Int block_size = 0;
   Int random_seed = 0;
