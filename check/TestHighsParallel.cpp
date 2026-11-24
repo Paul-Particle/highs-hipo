@@ -1,0 +1,465 @@
+#include "HCheckConfig.h"
+
+#if 0
+#include <omp.h>
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+#include <iostream>
+
+#include "catch.hpp"
+#include "interfaces/highs_c_api.h"
+#include "matrix_multiplication.hpp"
+#include "parallel/HighsParallel.h"
+
+using namespace highs;
+
+const int numThreads = highs::parallel::available_core_count();
+const bool dev_run = false;
+
+int64_t fib_sequential(const int64_t n) {
+  if (n <= 1) return 1;
+  return fib_sequential(n - 1) + fib_sequential(n - 2);
+}
+
+int64_t fib(const int64_t n) {
+  if (n <= 20) return fib_sequential(n);
+
+  int64_t n1;
+  parallel::spawn([&]() {
+    n1 = fib(n - 1);
+    TSAN_ANNOTATE_HAPPENS_BEFORE(&n1);
+  });
+
+  int64_t n2 = fib(n - 2);
+  TSAN_ANNOTATE_HAPPENS_BEFORE(&n2);
+
+  parallel::sync();
+
+  TSAN_ANNOTATE_HAPPENS_AFTER(&n1);
+  TSAN_ANNOTATE_HAPPENS_AFTER(&n2);
+  // printf("fib(%ld) = %ld + %ld = %ld\n", n, n1, n2, n1 + n2);
+  return n1 + n2;
+}
+#if 0
+int64_t fib_omp(const int64_t n) {
+  if (n <= 20) return fib_sequential(n);
+
+  int64_t n1;
+#pragma omp task shared(n1)
+  n1 = fib_omp(n - 1);
+
+  int64_t n2 = fib_omp(n - 2);
+
+#pragma omp taskwait
+
+  // printf("fib(%ld) = %ld + %ld = %ld\n", n, n1, n2, n1 + n2);
+  return n1 + n2;
+}
+
+// matrix_multiplication_omp
+// reference: https://computing.llnl.gov/tutorials/openMP/samples/C/omp_mm.c
+void matrix_multiplication_omp(unsigned nthreads) {
+  omp_set_num_threads(nthreads);
+
+  int i, j, k;
+
+#pragma omp parallel for private(i, j)
+  for (i = 0; i < N; ++i) {
+    for (j = 0; j < N; j++) {
+      a[i][j] = i + j;
+    }
+  }
+
+#pragma omp parallel for private(i, j)
+  for (i = 0; i < N; ++i) {
+    for (j = 0; j < N; j++) {
+      b[i][j] = i * j;
+    }
+  }
+
+#pragma omp parallel for private(i, j)
+  for (i = 0; i < N; ++i) {
+    for (j = 0; j < N; j++) {
+      c[i][j] = 0;
+    }
+  }
+
+#pragma omp parallel for private(i, j, k)
+  for (i = 0; i < N; ++i) {
+    for (j = 0; j < N; j++) {
+      for (k = 0; k < N; k++) {
+        c[i][j] += a[i][k] * b[k][j];
+      }
+    }
+  }
+
+  // int edge;
+
+  //#pragma omp parallel shared(a, b, c, nthreads) private(i, j, k)
+  //{
+  //  #pragma omp single private(i, j)
+  //  for(i = 0; i<N; i++) {
+  //    #pragma omp task private(j) firstprivate(i) depend(out: edge)
+  //    for (j=0; j<N; j++)
+  //      a[i][j]= i+j;
+  //  }
+
+  //  #pragma omp single private(i, j)
+  //  for(i = 0; i<N; i++) {
+  //    #pragma omp task private(j) firstprivate(i) depend(out: edge)
+  //    for (j=0; j<N; j++)
+  //      b[i][j]= i*j;
+  //  }
+
+  //  #pragma omp single private(i, j)
+  //  for(i = 0; i<N; i++) {
+  //    #pragma omp task private(j) firstprivate(i) depend(out: edge)
+  //    for (j=0; j<N; j++)
+  //      c[i][j]= 0;
+  //  }
+
+  //  #pragma omp single private(i, j)
+  //  for(i = 0; i<N; i++) {
+  //    #pragma omp task private(j, k) firstprivate(i) depend(in: edge)
+  //    for(j=0; j<N; j++) {
+  //      for (k=0; k<N; k++) {
+  //        c[i][j] += a[i][k] * b[k][j];
+  //      }
+  //    }
+  //  }
+  //}
+
+  // std::cout << reduce_sum() << std::endl;
+}
+#endif
+void matrix_multiplication_highs(unsigned nthreads) {
+  // #pragma omp parallel for private(i, j)
+  parallel::for_each(0, N, [&](HighsInt start, HighsInt end) {
+    for (int i = start; i < end; ++i) {
+      for (int j = 0; j < N; j++) {
+        a[i][j] = i + j;
+      }
+    }
+  });
+
+  parallel::for_each(0, N, [&](HighsInt start, HighsInt end) {
+    for (int i = start; i < end; ++i) {
+      for (int j = 0; j < N; j++) {
+        b[i][j] = i * j;
+      }
+    }
+  });
+
+  parallel::for_each(0, N, [&](HighsInt start, HighsInt end) {
+    for (int i = start; i < end; ++i) {
+      for (int j = 0; j < N; j++) {
+        c[i][j] = 0;
+      }
+    }
+  });
+
+  parallel::for_each(0, N, [&](HighsInt start, HighsInt end) {
+    for (int i = start; i < end; ++i) {
+      for (int j = 0; j < N; j++) {
+        for (int k = 0; k < N; k++) {
+          c[i][j] += a[i][k] * b[k][j];
+        }
+      }
+    }
+  });
+}
+#if 0
+std::chrono::microseconds measure_time_omp(unsigned num_threads) {
+  auto beg = std::chrono::high_resolution_clock::now();
+  matrix_multiplication_omp(num_threads);
+  auto end = std::chrono::high_resolution_clock::now();
+  return std::chrono::duration_cast<std::chrono::microseconds>(end - beg);
+}
+#endif
+std::chrono::microseconds measure_time_highs(unsigned num_threads) {
+  auto beg = std::chrono::high_resolution_clock::now();
+  matrix_multiplication_highs(num_threads);
+  auto end = std::chrono::high_resolution_clock::now();
+  return std::chrono::duration_cast<std::chrono::microseconds>(end - beg);
+}
+
+int N = 0;
+double **a = nullptr, **b = nullptr, **c = nullptr;
+
+void matrix_multiplication(const std::string& model, const unsigned num_threads,
+                           const unsigned num_rounds) {
+  if (dev_run)
+    std::cout << std::setw(12) << "size" << std::setw(12) << "runtime"
+              << std::endl;
+
+  for (int i = 128; i <= 512; i += 128) {
+    N = i;
+
+    allocate_matrix();
+
+    double runtime{0.0};
+
+    for (unsigned j = 0; j < num_rounds; ++j) {
+#if 0
+      if (model == "highs") {
+        runtime += measure_time_highs(num_threads).count();
+      } else if (model == "omp") {
+        runtime += measure_time_omp(num_threads).count();
+      } else
+        assert(false);
+#else
+      runtime += measure_time_highs(num_threads).count();
+#endif
+    }
+
+    if (dev_run)
+      std::cout << std::setw(12) << N << std::setw(12)
+                << runtime / num_rounds / 1e3 << std::endl;
+
+    deallocate_matrix();
+  }
+}
+
+TEST_CASE("MatrixMultHighs", "[parallel]") {
+  HighsTaskExecutor::shutdown();
+  parallel::initialize_scheduler(numThreads);
+  if (dev_run) std::cout << "\nhighs workstealing for loop:" << std::endl;
+  matrix_multiplication("highs", parallel::num_threads(), 1);
+  HighsTaskExecutor::shutdown();
+}
+
+TEST_CASE("FibonacciTasksHighs", "[parallel]") {
+  HighsTaskExecutor::shutdown();
+  auto beg = std::chrono::high_resolution_clock::now();
+  parallel::initialize_scheduler(numThreads);
+  int64_t result = fib(41);
+  auto end = std::chrono::high_resolution_clock::now();
+
+  if (dev_run)
+    std::cout << "time elapsed for fib(41) with HiGHS work stealing: "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end -
+                                                                        beg)
+                      .count() /
+                  1e3)
+              << "ms" << std::endl;
+
+  // REQUIRE(result == 4807526976);
+  // REQUIRE(result == 20365011074);
+  // fib 41
+  REQUIRE(result == 267914296);
+  HighsTaskExecutor::shutdown();
+}
+
+#if 0
+TEST_CASE("MatrixMultOmp", "[parallel]") {
+  if (dev_run)
+    std::cout << "\nomp for loop:" << std::endl;
+  matrix_multiplication("omp", numThreads, 1);
+}
+TEST_CASE("FibonacciTasksOmp", "[parallel]") {
+  int64_t result;
+  auto beg = std::chrono::high_resolution_clock::now();
+#pragma omp parallel num_threads(numThreads)
+  {
+#pragma omp single
+    { result = fib_omp(41); }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+
+  if (dev_run)
+    std::cout << "time elapsed for fib(41) with omp tasks: "
+	      << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg)
+		  .count() / 1e3)
+	      << "ms" << std::endl;
+
+  // fib 41
+  REQUIRE(result == 267914296);
+}
+#endif
+
+// Test that consistently failed with
+// > terminating due to uncaught exception of type HighsTask::Interrupt
+// when compiled in debug.
+// This was fixed by catching and rethrowing in the TaskGroup destructor.
+
+static void loseTime() {
+  long long total = 0;
+  for (int i = 0; i < 1000; ++i) {
+    total += i * i * i;
+  }
+}
+
+static void nestedTask() {
+  highs::parallel::TaskGroup tg;
+  tg.spawn([]() { loseTime(); });
+  tg.spawn([]() { loseTime(); });
+}
+
+TEST_CASE("CancelNestedTasks", "[parallel]") {
+  highs::parallel::initialize_scheduler();
+
+  for (int i = 0; i < 1000; ++i) {
+    highs::parallel::TaskGroup tg;
+    tg.spawn([]() { nestedTask(); });
+    tg.spawn([]() { nestedTask(); });
+    loseTime();
+  }
+
+  HighsTaskExecutor::shutdown();
+}
+
+TEST_CASE("AvailableCoreCount", "[parallel]") {
+  unsigned int cores = highs::parallel::available_core_count();
+  REQUIRE(cores > 0);
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+TEST_CASE("AffinityReducedCoreCount", "[parallel]") {
+  // Initialize scheduler with full core count
+  highs::parallel::initialize_scheduler();
+  int initial_threads = highs::parallel::num_threads();
+
+  // Restrict affinity to a single core
+  DWORD_PTR original_mask, system_mask;
+  GetProcessAffinityMask(GetCurrentProcess(), &original_mask, &system_mask);
+  SetProcessAffinityMask(GetCurrentProcess(), 1);
+
+  // available_core_count should now report 1
+  unsigned int cores = highs::parallel::available_core_count();
+  REQUIRE(cores == 1);
+  REQUIRE(initial_threads >= static_cast<int>(cores));
+
+  // Restore original affinity
+  SetProcessAffinityMask(GetCurrentProcess(), original_mask);
+  HighsTaskExecutor::shutdown();
+}
+#elif defined(__linux__)
+TEST_CASE("AffinityReducedCoreCount", "[parallel]") {
+  // Initialize scheduler with full core count
+  highs::parallel::initialize_scheduler();
+  int initial_threads = highs::parallel::num_threads();
+
+  // Restrict affinity to a single core
+  cpu_set_t original_set, restricted_set;
+  sched_getaffinity(0, sizeof(original_set), &original_set);
+  CPU_ZERO(&restricted_set);
+  CPU_SET(0, &restricted_set);
+  sched_setaffinity(0, sizeof(restricted_set), &restricted_set);
+
+  // available_core_count should now report 1
+  unsigned int cores = highs::parallel::available_core_count();
+  REQUIRE(cores == 1);
+  REQUIRE(initial_threads >= static_cast<int>(cores));
+
+  // Restore original affinity
+  sched_setaffinity(0, sizeof(original_set), &original_set);
+  HighsTaskExecutor::shutdown();
+}
+#endif
+
+// Spin until flag >= value. Returns false on timeout so a bug can't hang CI.
+bool waitFor(const std::atomic<int>& flag, int value) {
+  const auto start = std::chrono::steady_clock::now();
+  while (flag.load() < value) {
+    if (std::chrono::steady_clock::now() - start > std::chrono::seconds(30))
+      return false;
+    std::this_thread::yield();
+  }
+  return true;
+}
+
+long long parallelSum(HighsInt n) {
+  std::atomic<long long> sum{0};
+  highs::parallel::for_each(
+      0, n,
+      [&](HighsInt start, HighsInt end) {
+        long long local = 0;
+        for (HighsInt i = start; i < end; ++i) local += i;
+        sum += local;
+      },
+      16);
+  return sum.load();
+}
+
+struct ThreadResult {
+  int threads_after_init = -1;
+  long long sum_after_init = -1;
+  int threads_after_reset = -1;
+  long long sum_after_reset = -1;
+  bool synced = true;
+};
+
+TEST_CASE("ParallelSchedulerIsPerThread", "[parallel]") {
+  const int num_threads_A_first = 2;
+  const int num_threads_A_second = 4;
+
+  const int num_threads_B = 3;
+  const HighsInt n = 1000;
+  const long long expected_sum = (long long)n * (n - 1) / 2;
+
+  std::atomic<int> init_done{0};
+  std::atomic<int> reset_done{0};
+  ThreadResult a, b;
+
+  std::thread threadA([&]() {
+    highs::parallel::initialize_scheduler(num_threads_A_first);
+    a.threads_after_init = highs::parallel::num_threads();
+    a.sum_after_init = parallelSum(n);
+    init_done++;
+    a.synced = waitFor(init_done, 2);
+
+    HighsTaskExecutor::shutdown(true);
+    reset_done++;
+
+    highs::parallel::initialize_scheduler(num_threads_A_second);
+    a.threads_after_reset = highs::parallel::num_threads();
+    a.sum_after_reset = parallelSum(n);
+
+    HighsTaskExecutor::shutdown(true);
+  });
+
+  std::thread threadB([&]() {
+    highs::parallel::initialize_scheduler(num_threads_B);
+    b.threads_after_init = highs::parallel::num_threads();
+    b.sum_after_init = parallelSum(n);
+    init_done++;
+
+    b.synced = waitFor(reset_done, 1);
+    b.threads_after_reset = highs::parallel::num_threads();
+    b.sum_after_reset = parallelSum(n);
+
+    HighsTaskExecutor::shutdown(true);
+  });
+
+  threadA.join();
+  threadB.join();
+
+  REQUIRE(a.synced);
+  REQUIRE(b.synced);
+
+  // Both threads got their own scheduler, with the correct sizes
+  REQUIRE(a.threads_after_init == num_threads_A_first);
+  REQUIRE(b.threads_after_init == num_threads_B);
+  REQUIRE(a.sum_after_init == expected_sum);
+  REQUIRE(b.sum_after_init == expected_sum);
+
+  // A's reset did not affect B
+  REQUIRE(b.threads_after_reset == num_threads_B);
+  REQUIRE(b.sum_after_reset == expected_sum);
+
+  HighsTaskExecutor::shutdown(true);
+
+  // A really was reset
+  REQUIRE(a.threads_after_reset == num_threads_A_second);
+  REQUIRE(a.sum_after_reset == expected_sum);
+}
